@@ -1,22 +1,10 @@
-###########################################################
-# Dockerfile that builds a CS2 Gameserver
-###########################################################
-
 # BUILD STAGE
-
-FROM cm2network/steamcmd:root as build_stage
-
-LABEL maintainer="joedwards32@gmail.com"
+FROM cm2network/steamcmd:root AS build_stage
 
 ENV STEAMAPPID 730
 ENV STEAMAPP cs2
 ENV STEAMAPPDIR "${HOMEDIR}/${STEAMAPP}-dedicated"
 ENV STEAMAPPVALIDATE 0
-
-COPY etc/entry.sh "${HOMEDIR}/entry.sh"
-COPY etc/server.cfg "/etc/server.cfg"
-COPY etc/pre.sh "/etc/pre.sh"
-COPY etc/post.sh "/etc/post.sh"
 
 RUN set -x \
 	# Install, update & upgrade packages
@@ -29,17 +17,49 @@ RUN set -x \
                 libicu-dev \
                 unzip \
 		jq \
+                tar \
 	&& mkdir -p "${STEAMAPPDIR}" \
-	# Add entry script
-	&& chmod +x "${HOMEDIR}/entry.sh" \
-	&& chown -R "${USER}:${USER}" "${HOMEDIR}/entry.sh" "${STEAMAPPDIR}" \
 	# Clean up
         && apt-get clean \
         && find /var/lib/apt/lists/ -type f -delete
 
 # BASE
 
-FROM build_stage AS bullseye-base
+FROM build_stage AS update_stage
+
+# Set permissions on STEAMAPPDIR
+#   Permissions may need to be reset if persistent volume mounted
+RUN set -x \
+        && chown -R "${USER}:${USER}" "${STEAMAPPDIR}" \
+        && chmod 0777 "${STEAMAPPDIR}"
+
+# Switch to user
+USER ${USER}
+
+WORKDIR ${HOMEDIR}
+
+# To test: using this API as a docker cache buster
+# ADD https://api.steampowered.com/ISteamNews/GetNewsForApp/v0002/?appid=730&count=1&maxlength=1
+# THIS IS BETTER TO CHECK VERSION UP TO DATE
+# ADD https://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/?appid=730&version=1.39.8.1&format=json
+RUN ${STEAMCMDDIR}/steamcmd.sh +force_install_dir "${STEAMAPPDIR}" +login anonymous +app_update "${STEAMAPPID}" +quit
+
+# Install the mods.
+RUN wget -qO- https://mms.alliedmods.net/mmsdrop/2.0/mmsource-2.0.0-git1314-linux.tar.gz | tar xvz -C /game/csgo/ \
+        &&  wget -qO- https://github.com/roflmuffin/CounterStrikeSharp/releases/download/v281/counterstrikesharp-with-runtime-build-281-linux-71ae253.zip | tar xvz -C /game/csgo/ \
+        && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-2.0.13.zip | tar xvz -C /game/csgo/addons/counterstrikesharp/plugins/ \
+        && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-shared-2.0.13.zip | tar xvz -C/game/csgo/addons/counterstrikesharp/plugins/ \
+        && wget -qO- https://github.com/B3none/cs2-instadefuse/releases/download/2.0.0/cs2-instadefuse-2.0.0.zip  | tar xvz -C /game/csgo/addons/counterstrikesharp/plugins/ \
+
+FROM update_stage AS bullseye-base
+
+COPY etc/entry.sh "${HOMEDIR}/entry.sh"
+COPY etc/server.cfg "/etc/server.cfg"
+COPY etc/pre.sh "/etc/pre.sh"
+COPY etc/post.sh "/etc/post.sh"
+
+RUN chmod +x "${HOMEDIR}/entry.sh" \
+        && chown -R "${USER}:${USER}" "${HOMEDIR}/entry.sh" "${STEAMAPPDIR}" \
 
 ENV CS2_SERVERNAME="cs2 private server" \
     CS2_CHEATS=0 \
