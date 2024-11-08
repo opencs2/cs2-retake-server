@@ -6,6 +6,11 @@ ENV STEAMAPP cs2
 ENV STEAMAPPDIR "${HOMEDIR}/${STEAMAPP}-dedicated"
 ENV STEAMAPPVALIDATE 0
 
+COPY etc/entry.sh "${HOMEDIR}/entry.sh"
+COPY etc/server.cfg "/etc/server.cfg"
+COPY etc/pre.sh "/etc/pre.sh"
+COPY etc/post.sh "/etc/post.sh"
+
 RUN set -x \
 	# Install, update & upgrade packages
 	&& apt-get update \
@@ -18,7 +23,11 @@ RUN set -x \
                 unzip \
 		jq \
                 tar \
+                libarchive-tools \
 	&& mkdir -p "${STEAMAPPDIR}" \
+        # Add entry script
+	&& chmod +x "${HOMEDIR}/entry.sh" \
+	&& chown -R "${USER}:${USER}" "${HOMEDIR}/entry.sh" "${STEAMAPPDIR}" \
 	# Clean up
         && apt-get clean \
         && find /var/lib/apt/lists/ -type f -delete
@@ -44,24 +53,9 @@ WORKDIR ${HOMEDIR}
 # ADD https://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/?appid=730&version=1.39.8.1&format=json
 RUN ${STEAMCMDDIR}/steamcmd.sh +force_install_dir "${STEAMAPPDIR}" +login anonymous +app_update "${STEAMAPPID}" +quit
 
-# Install the mods.
-RUN wget -qO- https://mms.alliedmods.net/mmsdrop/2.0/mmsource-2.0.0-git1314-linux.tar.gz | tar xvz -C /game/csgo/ \
-        &&  wget -qO- https://github.com/roflmuffin/CounterStrikeSharp/releases/download/v281/counterstrikesharp-with-runtime-build-281-linux-71ae253.zip | tar xvz -C /game/csgo/ \
-        && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-2.0.13.zip | tar xvz -C /game/csgo/addons/counterstrikesharp/plugins/ \
-        && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-shared-2.0.13.zip | tar xvz -C/game/csgo/addons/counterstrikesharp/plugins/ \
-        && wget -qO- https://github.com/B3none/cs2-instadefuse/releases/download/2.0.0/cs2-instadefuse-2.0.0.zip  | tar xvz -C /game/csgo/addons/counterstrikesharp/plugins/ \
-
 FROM update_stage AS bullseye-base
 
-COPY etc/entry.sh "${HOMEDIR}/entry.sh"
-COPY etc/server.cfg "/etc/server.cfg"
-COPY etc/pre.sh "/etc/pre.sh"
-COPY etc/post.sh "/etc/post.sh"
-
-RUN chmod +x "${HOMEDIR}/entry.sh" \
-        && chown -R "${USER}:${USER}" "${HOMEDIR}/entry.sh" "${STEAMAPPDIR}" \
-
-ENV CS2_SERVERNAME="cs2 private server" \
+ENV CS2_SERVERNAME="CS2 RETAKES" \
     CS2_CHEATS=0 \
     CS2_IP=0.0.0.0 \
     CS2_SERVER_HIBERNATE=0 \
@@ -70,7 +64,7 @@ ENV CS2_SERVERNAME="cs2 private server" \
     CS2_MAXPLAYERS=10 \
     CS2_RCONPW="changeme" \
     CS2_PW="changeme" \
-    CS2_MAPGROUP="mg_active" \    
+    CS2_MAPGROUP="mg_active" \
     CS2_STARTMAP="de_inferno" \
     CS2_GAMEALIAS="" \
     CS2_GAMETYPE=0 \
@@ -91,16 +85,20 @@ ENV CS2_SERVERNAME="cs2 private server" \
     CS2_LOG_ITEMS=0 \
     CS2_ADDITIONAL_ARGS=""
 
-# Set permissions on STEAMAPPDIR
-#   Permissions may need to be reset if persistent volume mounted
-RUN set -x \
-        && chown -R "${USER}:${USER}" "${STEAMAPPDIR}" \
-        && chmod 0777 "${STEAMAPPDIR}"
-
 # Switch to user
 USER ${USER}
 
 WORKDIR ${HOMEDIR}
+
+# Install the mods.
+RUN wget -qO- https://mms.alliedmods.net/mmsdrop/2.0/mmsource-2.0.0-git1314-linux.tar.gz | tar xvz -C "${STEAMAPPDIR}"/game/csgo/ \
+        &&  wget -qO- https://github.com/roflmuffin/CounterStrikeSharp/releases/download/v281/counterstrikesharp-with-runtime-build-281-linux-71ae253.zip | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/ \
+        && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-2.0.13.zip | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
+        && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-shared-2.0.13.zip | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/ \
+        && wget -qO- https://github.com/B3none/cs2-instadefuse/releases/download/2.0.0/cs2-instadefuse-2.0.0.zip  | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
+        && wget -qO- https://github.com/opencs2/cs2-agones/releases/download/0.0.3/cs2-agones.tar.gz | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
+        && sed -i '/Game_LowViolence/a \\t\t\tGame\tcsgo/addons/metamod' ${STEAMAPPDIR}/game/csgo/gameinfo.gi
+
 
 CMD ["bash", "entry.sh"]
 
