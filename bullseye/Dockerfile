@@ -1,5 +1,5 @@
 # BUILD STAGE
-FROM cm2network/steamcmd:root AS build_stage
+FROM cm2network/steamcmd:root@sha256:4451abc449bb71a000be3bf6443cdc3a06a3b4291d00bb281b6fa0f6946b7e25 AS build_stage
 
 ENV STEAMAPPID 730
 ENV STEAMAPP cs2
@@ -50,7 +50,8 @@ WORKDIR ${HOMEDIR}
 # To test: using this API as a docker cache buster
 # ADD https://api.steampowered.com/ISteamNews/GetNewsForApp/v0002/?appid=730&count=1&maxlength=1
 # THIS IS BETTER TO CHECK VERSION UP TO DATE
-# ADD https://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/?appid=730&version=1.39.8.1&format=json
+#ADD https://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/?appid=730&version=1.39.8.1&format=json
+ARG buildbuster=bust
 RUN ${STEAMCMDDIR}/steamcmd.sh +force_install_dir "${STEAMAPPDIR}" +login anonymous +app_update "${STEAMAPPID}" +quit
 
 FROM update_stage AS bullseye-base
@@ -90,15 +91,18 @@ USER ${USER}
 
 WORKDIR ${HOMEDIR}
 
+ARG cachebuster=buster
 # Install the mods.
 RUN wget -qO- https://mms.alliedmods.net/mmsdrop/2.0/mmsource-2.0.0-git1314-linux.tar.gz | tar xvz -C "${STEAMAPPDIR}"/game/csgo/ \
         &&  wget -qO- https://github.com/roflmuffin/CounterStrikeSharp/releases/download/v281/counterstrikesharp-with-runtime-build-281-linux-71ae253.zip | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/ \
         && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-2.0.13.zip | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
         && wget -qO- https://github.com/B3none/cs2-retakes/releases/download/2.0.13/cs2-retakes-shared-2.0.13.zip | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/ \
         && wget -qO- https://github.com/B3none/cs2-instadefuse/releases/download/2.0.0/cs2-instadefuse-2.0.0.zip  | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
-        && wget -qO- https://github.com/opencs2/cs2-agones/releases/download/0.0.3/cs2-agones.tar.gz | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
+ #       && wget -qO- https://github.com/opencs2/cs2-agones/releases/download/0.0.5/cs2-agones.tar.gz | bsdtar -xvf- -C "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/ \
         && sed -i '/Game_LowViolence/a \\t\t\tGame\tcsgo/addons/metamod' ${STEAMAPPDIR}/game/csgo/gameinfo.gi
 
+# use for local dev
+ADD AgonesPlugin "${STEAMAPPDIR}"/game/csgo/addons/counterstrikesharp/plugins/AgonesPlugin
 
 CMD ["bash", "entry.sh"]
 
